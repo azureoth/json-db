@@ -27,7 +27,7 @@ namespace Azureoth.Modules.SQLdb
             { @"MTM\((\w+)\)$", "-THROUGH" },
         };
 
-        public SQLSchema JsonToSQL(JsonDatabaseSchema Schema, string DatabaseName, int Version)
+        public SQLSchema JsonToSQL(Dictionary<string, JsonTable> Schema, string DatabaseName, string SchemaName, bool CreateSchema = true)
         {
             var SqlSchema = new SQLSchema()
             {
@@ -36,9 +36,10 @@ namespace Azureoth.Modules.SQLdb
 
             ValidateSchemaAndFormatTypes(Schema);
 
-            Schema.DatabaseName += Version.ToString();
-            SqlSchema.RawSQL = $"use {DatabaseName};\r\nGO\r\nCreate Schema {Schema.DatabaseName};\r\nGO\r\n";
+            SqlSchema.RawSQL = $"use {DatabaseName};\r\nGO\r\n";
 
+            if (CreateSchema)
+                SqlSchema.RawSQL += $"Create Schema {SchemaName};\r\nGO\r\n";
 
             //Dependent Table, Principal Table, PK Fields Name:Type
             var OneToManyRelations = new List<Tuple<string, string, Dictionary<string, string>>>();
@@ -47,13 +48,13 @@ namespace Azureoth.Modules.SQLdb
             var ManyToManyRelations = new List<Tuple<string, string, Dictionary<string, string>, Dictionary<string, string>>>();
 
             //Parse Relations
-            foreach (var table in Schema.Tables)
+            foreach (var table in Schema)
             {
                 var foreignRelations = table.Value.Fields.Where(f => f.Value.Contains("-TABLE"));
 
                 foreach (var foreigRelation in foreignRelations)
                 {
-                    var tableWithFk = Schema.Tables.SingleOrDefault(t => t.Key == InnerValue(foreigRelation.Value));
+                    var tableWithFk = Schema.SingleOrDefault(t => t.Key == InnerValue(foreigRelation.Value));
 
                     if (tableWithFk.Equals(default(KeyValuePair<string, JsonTable>)))
                         throw new ArgumentException($"Table {InnerValue(foreigRelation.Value)} used in Array does not exist");
@@ -80,7 +81,7 @@ namespace Azureoth.Modules.SQLdb
                 var throughRelations = table.Value.Fields.Where(f => f.Value.Contains("-THROUGH"));
                 foreach (var throughRelation in throughRelations)
                 {
-                    var otherTable = Schema.Tables.SingleOrDefault(t => t.Key == InnerValue(throughRelation.Value));
+                    var otherTable = Schema.SingleOrDefault(t => t.Key == InnerValue(throughRelation.Value));
 
                     if (otherTable.Equals(default(KeyValuePair<string, JsonTable>)))
                         throw new ArgumentException($"Table {InnerValue(throughRelation.Value)} used in MTM does not exist");
@@ -120,9 +121,9 @@ namespace Azureoth.Modules.SQLdb
             }
 
             //Create tables
-            foreach (var table in Schema.Tables)
+            foreach (var table in Schema)
             {
-                SqlSchema.RawSQL += $"Create Table {Schema.DatabaseName}.{table.Key} ( ";
+                SqlSchema.RawSQL += $"Create Table {SchemaName}.{table.Key} ( ";
 
                 //Add default PK if none specified
                 if (table.Value?.Meta?.PrimaryKeyColumns == null || !table.Value.Meta.PrimaryKeyColumns.Any())
@@ -182,14 +183,14 @@ namespace Azureoth.Modules.SQLdb
             //Create Foreign Key Constraints
             foreach (var relation in OneToManyRelations.Select((r, index) => new { FkIndex = index, Relation = r }))
             {
-                SqlSchema.RawSQL += $"ALTER TABLE {Schema.DatabaseName}.{relation.Relation.Item1} Add Foreign Key (";
+                SqlSchema.RawSQL += $"ALTER TABLE {SchemaName}.{relation.Relation.Item1} Add Foreign Key (";
                 foreach (var fkType in relation.Relation.Item3)
                 {
                     SqlSchema.RawSQL += $"{relation.Relation.Item2}_{fkType.Key}{relation.FkIndex}, ";
                 }
 
                 SqlSchema.RawSQL = SqlSchema.RawSQL.Substring(0, SqlSchema.RawSQL.Length - 2);
-                SqlSchema.RawSQL += $") References {Schema.DatabaseName}.{relation.Relation.Item2}(";
+                SqlSchema.RawSQL += $") References {SchemaName}.{relation.Relation.Item2}(";
 
                 foreach (var fkType in relation.Relation.Item3)
                 {
@@ -203,7 +204,7 @@ namespace Azureoth.Modules.SQLdb
             //Create Through Tables
             foreach (var relation in ManyToManyRelations.Select((r, index) => new { FkIndex = index, Relation = r }))
             {
-                SqlSchema.RawSQL += $"Create TABLE {Schema.DatabaseName}.{relation.Relation.Item1}_{relation.Relation.Item2}_{relation.FkIndex} ( ";
+                SqlSchema.RawSQL += $"Create TABLE {SchemaName}.{relation.Relation.Item1}_{relation.Relation.Item2}_{relation.FkIndex} ( ";
 
                 //Foreign key fields for table 1
                 foreach (var fkType in relation.Relation.Item3)
@@ -223,14 +224,14 @@ namespace Azureoth.Modules.SQLdb
 
 
                 //Foreign key constraints for table 1
-                SqlSchema.RawSQL += $"ALTER TABLE {Schema.DatabaseName}.{relation.Relation.Item1}_{relation.Relation.Item2}_{relation.FkIndex} Add Foreign Key (";
+                SqlSchema.RawSQL += $"ALTER TABLE {SchemaName}.{relation.Relation.Item1}_{relation.Relation.Item2}_{relation.FkIndex} Add Foreign Key (";
                 foreach (var fkType in relation.Relation.Item3)
                 {
                     SqlSchema.RawSQL += $"{relation.Relation.Item2}_{fkType.Key}{relation.FkIndex}, ";
                 }
 
                 SqlSchema.RawSQL = SqlSchema.RawSQL.Substring(0, SqlSchema.RawSQL.Length - 2);
-                SqlSchema.RawSQL += $") References {Schema.DatabaseName}.{relation.Relation.Item2}(";
+                SqlSchema.RawSQL += $") References {SchemaName}.{relation.Relation.Item2}(";
 
                 foreach (var fkType in relation.Relation.Item3)
                 {
@@ -241,14 +242,14 @@ namespace Azureoth.Modules.SQLdb
 
 
                 //Foreign key constraints for table 2
-                SqlSchema.RawSQL += $"ALTER TABLE {Schema.DatabaseName}.{relation.Relation.Item1}_{relation.Relation.Item2}_{relation.FkIndex} Add Foreign Key (";
+                SqlSchema.RawSQL += $"ALTER TABLE {SchemaName}.{relation.Relation.Item1}_{relation.Relation.Item2}_{relation.FkIndex} Add Foreign Key (";
                 foreach (var fkType in relation.Relation.Item4)
                 {
                     SqlSchema.RawSQL += $"{relation.Relation.Item1}_{fkType.Key}{relation.FkIndex}, ";
                 }
 
                 SqlSchema.RawSQL = SqlSchema.RawSQL.Substring(0, SqlSchema.RawSQL.Length - 2);
-                SqlSchema.RawSQL += $") References {Schema.DatabaseName}.{relation.Relation.Item1}(";
+                SqlSchema.RawSQL += $") References {SchemaName}.{relation.Relation.Item1}(";
 
                 foreach (var fkType in relation.Relation.Item4)
                 {
@@ -259,7 +260,7 @@ namespace Azureoth.Modules.SQLdb
             }
 
             //Create indices specified in Meta for tables
-            foreach (var table in Schema.Tables)
+            foreach (var table in Schema)
             {
                 if (table.Value?.Meta?.Indices == null || !table.Value.Meta.Indices.Any())
                     continue;
@@ -267,7 +268,7 @@ namespace Azureoth.Modules.SQLdb
                 foreach(var index in table.Value.Meta.Indices.Select((i, loopIndex) => new { LoopIndex = loopIndex, Index = i }))
                 {
                     var unique = index.Index.IsUnique ? "Unique" : "";
-                    SqlSchema.RawSQL += $"Create {unique} Index {table.Key}_{index.LoopIndex} On {Schema.DatabaseName}.{table.Key} (";
+                    SqlSchema.RawSQL += $"Create {unique} Index {table.Key}_{index.LoopIndex} On {SchemaName}.{table.Key} (";
                     foreach(var indexedColumn in index.Index.IndexedColumns)
                     {
                         var order = indexedColumn.Value ? "ASC" : "DESC";
@@ -284,21 +285,16 @@ namespace Azureoth.Modules.SQLdb
         }
 
 
-        private static void ValidateSchemaAndFormatTypes(JsonDatabaseSchema schema)
+        private static void ValidateSchemaAndFormatTypes(Dictionary<string, JsonTable> schema)
         {
-            if (schema == null)
-                throw new ArgumentException("No schema included");
 
-            if (string.IsNullOrEmpty(schema.DatabaseName))
-                throw new ArgumentException("Database needs a name");
-
-            if (schema.Tables == null || !schema.Tables.Any())
+            if (schema == null || !schema.Any())
                 throw new ArgumentException("No tables defined");
 
-            if (schema.Tables.Select(t => t.Value).Count() != schema.Tables.Select(t => t.Value).Distinct().Count())
+            if (schema.Select(t => t.Value).Count() != schema.Select(t => t.Value).Distinct().Count())
                 throw new ArgumentException("Multiple tables share the same name");
 
-            foreach (var table in schema.Tables)
+            foreach (var table in schema)
             {
                 if (table.Value?.Fields == null || !table.Value.Fields.Any())
                     throw new ArgumentException($"No fields defined in table {table.Key}");
