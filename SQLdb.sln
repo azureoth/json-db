@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.25420.1
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BB2217D-0F2D-49D1-97BC-3654ED321F3B}") = "SQLdb", "SQLdb\SQLdb.xproj", "{DDA35DAA-E932-4B7F-90E9-3216337C6345}"
+EndProject
+Project("{8BB2217D-0F2D-49D1-97BC-3654ED321F3B}") = "SQLDatastructures", "SQLDatastructures\SQLDatastructures.xproj", "{9FA251B9-8662-44AC-8D86-E41C450C1615}"
+EndProject
+Project("{8BB2217D-0F2D-49D1-97BC-3654ED321F3B}") = "ConsoleTester", "ConsoleTester\ConsoleTester.xproj", "{CA823709-B014-4598-A358-1D848F11ABC4}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{DDA35DAA-E932-4B7F-90E9-3216337C6345}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DDA35DAA-E932-4B7F-90E9-3216337C6345}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DDA35DAA-E932-4B7F-90E9-3216337C6345}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DDA35DAA-E932-4B7F-90E9-3216337C6345}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9FA251B9-8662-44AC-8D86-E41C450C1615}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9FA251B9-8662-44AC-8D86-E41C450C1615}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9FA251B9-8662-44AC-8D86-E41C450C1615}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9FA251B9-8662-44AC-8D86-E41C450C1615}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CA823709-B014-4598-A358-1D848F11ABC4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CA823709-B014-4598-A358-1D848F11ABC4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CA823709-B014-4598-A358-1D848F11ABC4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CA823709-B014-4598-A358-1D848F11ABC4}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
