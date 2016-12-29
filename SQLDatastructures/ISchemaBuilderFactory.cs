@@ -1,15 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Data.SqlClient;
 using System.Linq;
 using System.Threading.Tasks;
 
 namespace Azureoth.Modules.SQLdb.Datastructures.Schema
 {
-    public class SQLSchema
+    public interface ISchemaBuilderFactory
     {
-        public string SchemaCreateSQL;
-        public string RawSQL;
-        public string OriginalJson;
+        ISchemaBuilder CreateSchemaBuilder(string DatabaseConnectionString, string DatabaseName);
     }
 }

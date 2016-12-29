@@ -36,16 +36,14 @@ namespace Azureoth.Modules.SQLdb
 
             ValidateSchemaAndFormatTypes(Schema);
 
-            SqlSchema.RawSQL = $"use {DatabaseName};\r\nGO\r\n";
+            SqlSchema.SchemaCreateSQL = $"Create Schema {SchemaName};";
+            SqlSchema.RawSQL = "";
 
-            if (CreateSchema)
-                SqlSchema.RawSQL += $"Create Schema {SchemaName};\r\nGO\r\n";
+            //Dependent Table, Principal Table, PK Fields Name:Type, FK Name
+            var OneToManyRelations = new List<Tuple<string, string, Dictionary<string, string>, string>>();
 
-            //Dependent Table, Principal Table, PK Fields Name:Type
-            var OneToManyRelations = new List<Tuple<string, string, Dictionary<string, string>>>();
-
-            //Table 1, Table 2, Table 1 PK  Fields Name:Type, Table 2 PK  Fields Name:Type
-            var ManyToManyRelations = new List<Tuple<string, string, Dictionary<string, string>, Dictionary<string, string>>>();
+            //Table 1, Table 2, Table 1 PK  Fields Name:Type, Table 2 PK  Fields Name:Type, FK Name
+            var ManyToManyRelations = new List<Tuple<string, string, Dictionary<string, string>, Dictionary<string, string>, string>>();
 
             //Parse Relations
             foreach (var table in Schema)
@@ -73,8 +71,8 @@ namespace Azureoth.Modules.SQLdb
                         }
                     }
 
-                    OneToManyRelations.Add(new Tuple<string, string, Dictionary<string, string>>
-                        (tableWithFk.Key, table.Key, ForeignPks));
+                    OneToManyRelations.Add(new Tuple<string, string, Dictionary<string, string>, string>
+                        (tableWithFk.Key, table.Key, ForeignPks, foreigRelation.Key));
                 }
 
 
@@ -115,15 +113,15 @@ namespace Azureoth.Modules.SQLdb
                         }
                     }
 
-                    ManyToManyRelations.Add(new Tuple<string, string, Dictionary<string, string>, Dictionary<string, string>>
-                        (otherTable.Key, table.Key, ForeignPkSet1, ForeignPkSet2));
+                    ManyToManyRelations.Add(new Tuple<string, string, Dictionary<string, string>, Dictionary<string, string>, string>
+                        (otherTable.Key, table.Key, ForeignPkSet1, ForeignPkSet2, throughRelation.Key));
                 }
             }
 
             //Create tables
             foreach (var table in Schema)
             {
-                SqlSchema.RawSQL += $"Create Table {SchemaName}.{table.Key} ( ";
+                SqlSchema.RawSQL += $"Create TABLE {SchemaName}.{table.Key} ( ";
 
                 //Add default PK if none specified
                 if (table.Value?.Meta?.PrimaryKeyColumns == null || !table.Value.Meta.PrimaryKeyColumns.Any())
@@ -142,7 +140,7 @@ namespace Azureoth.Modules.SQLdb
 
                     if ((table.Value?.Meta?.RequiredColumns != null &&
                         table.Value.Meta.RequiredColumns.Contains(field.Key)) ||
-                        (table.Value?.Meta?.PrimaryKeyColumns != null && 
+                        (table.Value?.Meta?.PrimaryKeyColumns != null &&
                         table.Value.Meta.PrimaryKeyColumns.Contains(field.Key)))
                     {
                         SqlSchema.RawSQL += "NOT NULL ";
@@ -153,14 +151,13 @@ namespace Azureoth.Modules.SQLdb
 
                 //Add Foreign Key fields
                 //FkIndex required to ensure multiple OneToMany Relations between the same two tables work
-                var foreignKeyFields = OneToManyRelations.Select((r, index) => new { FkIndex = index, Relation = r })
-                    .Where(r => r.Relation.Item1 == table.Key);
+                var foreignKeyFields = OneToManyRelations.Where(r => r.Item1 == table.Key);
 
                 foreach (var fk in foreignKeyFields)
                 {
-                    foreach (var fkType in fk.Relation.Item3)
+                    foreach (var fkType in fk.Item3)
                     {
-                        SqlSchema.RawSQL += $"{fk.Relation.Item2}_{fkType.Key}{fk.FkIndex} {fkType.Value}, ";
+                        SqlSchema.RawSQL += $"{fk.Item2}_{fkType.Key}_{fk.Item4} {fkType.Value}, ";
                     }
                 }
 
@@ -168,7 +165,7 @@ namespace Azureoth.Modules.SQLdb
                 if (table.Value?.Meta?.PrimaryKeyColumns != null && table.Value.Meta.PrimaryKeyColumns.Any())
                 {
                     SqlSchema.RawSQL += $"Constraint {table.Key}_PK PRIMARY KEY ( ";
-                    foreach(var pk in table.Value.Meta.PrimaryKeyColumns)
+                    foreach (var pk in table.Value.Meta.PrimaryKeyColumns)
                     {
                         SqlSchema.RawSQL += $"{pk}, ";
                     }
@@ -181,82 +178,94 @@ namespace Azureoth.Modules.SQLdb
             }
 
             //Create Foreign Key Constraints
-            foreach (var relation in OneToManyRelations.Select((r, index) => new { FkIndex = index, Relation = r }))
+            foreach (var relation in OneToManyRelations)
             {
-                SqlSchema.RawSQL += $"ALTER TABLE {SchemaName}.{relation.Relation.Item1} Add Foreign Key (";
-                foreach (var fkType in relation.Relation.Item3)
+                SqlSchema.RawSQL += $"ALTER TABLE {SchemaName}.{relation.Item1} Add Constraint {relation.Item1}_{relation.Item2}_{relation.Item4}_FK Foreign Key (";
+                foreach (var fkType in relation.Item3)
                 {
-                    SqlSchema.RawSQL += $"{relation.Relation.Item2}_{fkType.Key}{relation.FkIndex}, ";
+                    SqlSchema.RawSQL += $"{relation.Item2}_{fkType.Key}_{relation.Item4}, ";
                 }
 
                 SqlSchema.RawSQL = SqlSchema.RawSQL.Substring(0, SqlSchema.RawSQL.Length - 2);
-                SqlSchema.RawSQL += $") References {SchemaName}.{relation.Relation.Item2}(";
+                SqlSchema.RawSQL += $") References {SchemaName}.{relation.Item2}(";
 
-                foreach (var fkType in relation.Relation.Item3)
+                foreach (var fkType in relation.Item3)
                 {
                     SqlSchema.RawSQL += $"{fkType.Key}, ";
                 }
                 SqlSchema.RawSQL = SqlSchema.RawSQL.Substring(0, SqlSchema.RawSQL.Length - 2);
-                SqlSchema.RawSQL += ");";
+                SqlSchema.RawSQL += "); ";
             }
 
 
             //Create Through Tables
-            foreach (var relation in ManyToManyRelations.Select((r, index) => new { FkIndex = index, Relation = r }))
+            foreach (var relation in ManyToManyRelations)
             {
-                SqlSchema.RawSQL += $"Create TABLE {SchemaName}.{relation.Relation.Item1}_{relation.Relation.Item2}_{relation.FkIndex} ( ";
+                SqlSchema.RawSQL += $"Create TABLE {SchemaName}.{relation.Item1}_{relation.Item2}_{relation.Item5} ( ";
 
                 //Foreign key fields for table 1
-                foreach (var fkType in relation.Relation.Item3)
+                foreach (var fkType in relation.Item3)
                 {
-                    SqlSchema.RawSQL += $"{relation.Relation.Item2}_{fkType.Key}{relation.FkIndex} {fkType.Value}, ";
+                    SqlSchema.RawSQL += $"{relation.Item2}_{fkType.Key} {fkType.Value} NOT NULL, ";
                 }
-
 
                 //Foreign key fields for table 2
-                foreach (var fkType in relation.Relation.Item4)
+                foreach (var fkType in relation.Item4)
                 {
-                    SqlSchema.RawSQL += $"{relation.Relation.Item1}_{fkType.Key}{relation.FkIndex} {fkType.Value}, ";
+                    SqlSchema.RawSQL += $"{relation.Item1}_{fkType.Key} {fkType.Value} NOT NULL, ";
                 }
+
+                //Add PK constraint on all the fields 
+                SqlSchema.RawSQL += $"Constraint {relation.Item1}_{relation.Item2}_{relation.Item5}_PK PRIMARY KEY ( ";
+                foreach (var fkType in relation.Item3)
+                {
+                    SqlSchema.RawSQL += $"{relation.Item2}_{fkType.Key}, ";
+                }
+                foreach (var fkType in relation.Item4)
+                {
+                    SqlSchema.RawSQL += $"{relation.Item1}_{fkType.Key}, ";
+                }
+                SqlSchema.RawSQL = SqlSchema.RawSQL.Substring(0, SqlSchema.RawSQL.Length - 2);
+                SqlSchema.RawSQL += ")  ";
 
                 SqlSchema.RawSQL = SqlSchema.RawSQL.Substring(0, SqlSchema.RawSQL.Length - 2);
                 SqlSchema.RawSQL += $"); ";
 
 
                 //Foreign key constraints for table 1
-                SqlSchema.RawSQL += $"ALTER TABLE {SchemaName}.{relation.Relation.Item1}_{relation.Relation.Item2}_{relation.FkIndex} Add Foreign Key (";
-                foreach (var fkType in relation.Relation.Item3)
+                SqlSchema.RawSQL += $"ALTER TABLE {SchemaName}.{relation.Item1}_{relation.Item2}_{relation.Item5} Add Constraint {relation.Item1}_{relation.Item2}_{relation.Item5}_FK Foreign Key (";
+                foreach (var fkType in relation.Item3)
                 {
-                    SqlSchema.RawSQL += $"{relation.Relation.Item2}_{fkType.Key}{relation.FkIndex}, ";
+                    SqlSchema.RawSQL += $"{relation.Item2}_{fkType.Key}, ";
                 }
 
                 SqlSchema.RawSQL = SqlSchema.RawSQL.Substring(0, SqlSchema.RawSQL.Length - 2);
-                SqlSchema.RawSQL += $") References {SchemaName}.{relation.Relation.Item2}(";
+                SqlSchema.RawSQL += $") References {SchemaName}.{relation.Item2}(";
 
-                foreach (var fkType in relation.Relation.Item3)
+                foreach (var fkType in relation.Item3)
                 {
                     SqlSchema.RawSQL += $"{fkType.Key}, ";
                 }
                 SqlSchema.RawSQL = SqlSchema.RawSQL.Substring(0, SqlSchema.RawSQL.Length - 2);
-                SqlSchema.RawSQL += ");";
+                SqlSchema.RawSQL += "); ";
 
 
                 //Foreign key constraints for table 2
-                SqlSchema.RawSQL += $"ALTER TABLE {SchemaName}.{relation.Relation.Item1}_{relation.Relation.Item2}_{relation.FkIndex} Add Foreign Key (";
-                foreach (var fkType in relation.Relation.Item4)
+                SqlSchema.RawSQL += $"ALTER TABLE {SchemaName}.{relation.Item1}_{relation.Item2}_{relation.Item5} Add Constraint {relation.Item2}_{relation.Item1}_{relation.Item5}_FK Foreign Key  (";
+                foreach (var fkType in relation.Item4)
                 {
-                    SqlSchema.RawSQL += $"{relation.Relation.Item1}_{fkType.Key}{relation.FkIndex}, ";
+                    SqlSchema.RawSQL += $"{relation.Item1}_{fkType.Key}, ";
                 }
 
                 SqlSchema.RawSQL = SqlSchema.RawSQL.Substring(0, SqlSchema.RawSQL.Length - 2);
-                SqlSchema.RawSQL += $") References {SchemaName}.{relation.Relation.Item1}(";
+                SqlSchema.RawSQL += $") References {SchemaName}.{relation.Item1}(";
 
-                foreach (var fkType in relation.Relation.Item4)
+                foreach (var fkType in relation.Item4)
                 {
                     SqlSchema.RawSQL += $"{fkType.Key}, ";
                 }
                 SqlSchema.RawSQL = SqlSchema.RawSQL.Substring(0, SqlSchema.RawSQL.Length - 2);
-                SqlSchema.RawSQL += ");";
+                SqlSchema.RawSQL += "); ";
             }
 
             //Create indices specified in Meta for tables
@@ -265,11 +274,11 @@ namespace Azureoth.Modules.SQLdb
                 if (table.Value?.Meta?.Indices == null || !table.Value.Meta.Indices.Any())
                     continue;
 
-                foreach(var index in table.Value.Meta.Indices.Select((i, loopIndex) => new { LoopIndex = loopIndex, Index = i }))
+                foreach (var index in table.Value.Meta.Indices.Select((i, loopIndex) => new { LoopIndex = loopIndex, Index = i }))
                 {
                     var unique = index.Index.IsUnique ? "Unique" : "";
                     SqlSchema.RawSQL += $"Create {unique} Index {table.Key}_{index.LoopIndex} On {SchemaName}.{table.Key} (";
-                    foreach(var indexedColumn in index.Index.IndexedColumns)
+                    foreach (var indexedColumn in index.Index.IndexedColumns)
                     {
                         var order = indexedColumn.Value ? "ASC" : "DESC";
                         SqlSchema.RawSQL += $"{indexedColumn.Key} {order}, ";
@@ -278,10 +287,10 @@ namespace Azureoth.Modules.SQLdb
                     SqlSchema.RawSQL = SqlSchema.RawSQL.Substring(0, SqlSchema.RawSQL.Length - 2);
                     SqlSchema.RawSQL += ");";
                 }
-                
+
             }
 
-                return SqlSchema;
+            return SqlSchema;
         }
 
 
