@@ -1,6 +1,12 @@
 ﻿{
   "version": "1.0.0-*",
 
+  "scripts": {
+    "postcompile": [
+      "dotnet pack --no-build --configuration %compile:Configuration%"
+    ]
+  },
+
   "dependencies": {
     "NETStandard.Library": "1.6.0",
     "System.Data.SqlClient": "4.1.0"

@@ -29,8 +29,8 @@ namespace Azureoth.Modules.SQLdb
             stageDatabaseName = ExtractDatabaseNameFromConnectionString(secondaryDatabaseConnection);
             translator = new SchemaTranslator();
             TempFolderBasePath = TempFolderPath;
-            SqlPackageUtililtyPath = "\"C:\\Program Files (x86)\\Microsoft SQL Server\\130\\DAC\\bin\\SqlPackage.exe\"";
-            SqlCommandUtililtyPath = "\"C:\\Program Files\\Microsoft SQL Server\\110\\Tools\\Binn\\SQLCMD.EXE\"";
+            SqlPackageUtililtyPath = "\"third_party\\SQLPackage\\SqlPackage.exe\"";
+            SqlCommandUtililtyPath = "\"third_party\\SQLCMD\\SQLCMD.EXE\"";
         }
 
 
