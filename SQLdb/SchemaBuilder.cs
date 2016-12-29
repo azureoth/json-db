@@ -90,7 +90,7 @@ namespace Azureoth.Modules.SQLdb
 
             //Generate migration sql
             var migrationPath = Path.Combine(TempFolderBasePath, AppName + "M.sql");
-            string ExitIfDataLoss = ForceFlag ? "/p:BlockOnPossibleDataLoss=False" : "/p:BlockOnPossibleDataLoss=False";
+            string ExitIfDataLoss = ForceFlag ? "/p:BlockOnPossibleDataLoss=False" : "/p:BlockOnPossibleDataLoss=True";
 
             var diffProcess = Process.Start($"{SqlPackageUtililtyPath}", $"/a:Script /sf:" +
                 $"{Path.Combine(TempFolderBasePath, AppName + "_Staging.dacpac")} /tf:{Path.Combine(TempFolderBasePath, AppName + ".dacpac")}" +
@@ -100,7 +100,12 @@ namespace Azureoth.Modules.SQLdb
 
             //Apply migraiton sql
             var filteredMigrationsPath = FilterSqlFileForSchema(migrationPath, AppName);
-            var migrationProcess = Process.Start($"{SqlCommandUtililtyPath}", $"-S {prodConnection.ConnectionString.Split(';', '=').ElementAt(1)} -i \"{filteredMigrationsPath}\"");
+
+            var migrationProcess = new Process();
+            migrationProcess.StartInfo.RedirectStandardOutput = true;
+            migrationProcess.StartInfo.FileName = SqlCommandUtililtyPath;
+            migrationProcess.StartInfo.Arguments = $"-S {prodConnection.ConnectionString.Split(';', '=').ElementAt(1)} -i \"{filteredMigrationsPath}\"";
+            migrationProcess.Start();
 
             //Check if data loss exception happens
             var output = migrationProcess.StandardOutput.ReadToEnd();
