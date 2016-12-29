@@ -9,9 +9,9 @@ namespace Azureoth.Modules.SQLdb
 {
     public class SchemaBuilderFactory : ISchemaBuilderFactory
     {
-        public ISchemaBuilder CreateSchemaBuilder(string DatabaseConnectionString, string DatabaseName)
+        public ISchemaBuilder CreateSchemaBuilder(string PrimaryDbConnection, string SecondaryDbConnection, string TempFolderPath)
         {
-            return new SchemaBuilder(DatabaseName, DatabaseConnectionString);
+            return new SchemaBuilder(PrimaryDbConnection, SecondaryDbConnection, TempFolderPath);
         }
     }
 }

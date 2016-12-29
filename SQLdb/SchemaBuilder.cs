@@ -12,19 +12,23 @@ namespace Azureoth.Modules.SQLdb
 {
     public class SchemaBuilder : ISchemaBuilder
     {
-        private string DatabaseName;
-        private SqlConnection connection;
+        private string stageDatabaseName;
+        private string prodDatabaseName;
+        private SqlConnection prodConnection;
+        private SqlConnection stageConnection;
         private SchemaTranslator translator;
         private string TempFolderBasePath;
         private string SqlPackageUtililtyPath;
         private string SqlCommandUtililtyPath;
 
-        internal SchemaBuilder(string databaseName, string databaseConnectionString)
+        internal SchemaBuilder(string primaryDatabaseConnection, string secondaryDatabaseConnection, string TempFolderPath)
         {
-            DatabaseName = databaseName;
-            connection = new SqlConnection(databaseConnectionString);
+            prodConnection = new SqlConnection(primaryDatabaseConnection);
+            prodDatabaseName = ExtractDatabaseNameFromConnectionString(primaryDatabaseConnection);
+            stageConnection = new SqlConnection(secondaryDatabaseConnection);
+            stageDatabaseName = ExtractDatabaseNameFromConnectionString(secondaryDatabaseConnection);
             translator = new SchemaTranslator();
-            TempFolderBasePath = "C:/Logs/";
+            TempFolderBasePath = TempFolderPath;
             SqlPackageUtililtyPath = "\"C:\\Program Files (x86)\\Microsoft SQL Server\\130\\DAC\\bin\\SqlPackage.exe\"";
             SqlCommandUtililtyPath = "\"C:\\Program Files\\Microsoft SQL Server\\110\\Tools\\Binn\\SQLCMD.EXE\"";
         }
@@ -32,78 +36,101 @@ namespace Azureoth.Modules.SQLdb
 
         public async Task CreateSchema(Dictionary<string, JsonTable> NewSchema, string AppName)
         {
-            await connection.OpenAsync();
+            await prodConnection.OpenAsync();
 
-            var sqlSchema = translator.JsonToSQL(NewSchema, DatabaseName, AppName, false);
+            var sqlSchema = translator.JsonToSQL(NewSchema, stageDatabaseName, AppName, false);
 
             //Apply new staging schema
             var createSchemaCommand = new SqlCommand(sqlSchema.SchemaCreateSQL);
-            createSchemaCommand.Connection = connection;
+            createSchemaCommand.Connection = prodConnection;
             await createSchemaCommand.ExecuteNonQueryAsync();
 
             //Create new tables for staging schema
             var applyTempSchemaCommand = new SqlCommand(sqlSchema.RawSQL);
-            applyTempSchemaCommand.Connection = connection;
+            applyTempSchemaCommand.Connection = prodConnection;
             await applyTempSchemaCommand.ExecuteNonQueryAsync();
 
-            connection.Close();
+            prodConnection.Close();
         }
 
-        public async Task UpdateSchema(Dictionary<string, JsonTable> OldSchema, Dictionary<string, JsonTable> NewSchema, string AppName)
+        public async Task UpdateSchema(Dictionary<string, JsonTable> OldSchema, Dictionary<string, JsonTable> NewSchema, string AppName, bool ForceFlag = false)
         {
-            await connection.OpenAsync();
-
-            var stagingSchemaName = AppName + "_Stage";
+            await stageConnection.OpenAsync();
 
             //Generate new staging schema
-            var newGeneratedSchema = translator.JsonToSQL(NewSchema, DatabaseName, stagingSchemaName, false);
+            var newGeneratedSchema = translator.JsonToSQL(NewSchema, stageDatabaseName, AppName, false);
 
             //Drop existing staging schema
-            var dropExistingStageSchemaCommand = new SqlCommand($"exec CleanUpSchema '{stagingSchemaName}', 'w'");
-            dropExistingStageSchemaCommand.Connection = connection;
+            var dropExistingStageSchemaCommand = new SqlCommand($"exec CleanUpSchema '{AppName}', 'w'");
+            dropExistingStageSchemaCommand.Connection = stageConnection;
             await dropExistingStageSchemaCommand.ExecuteNonQueryAsync();
 
             //Apply new staging schema
             var createSchemaCommand = new SqlCommand(newGeneratedSchema.SchemaCreateSQL);
-            createSchemaCommand.Connection = connection;
+            createSchemaCommand.Connection = stageConnection;
             await createSchemaCommand.ExecuteNonQueryAsync();
 
             //Create new tables for staging schema
             var applyTempSchemaCommand = new SqlCommand(newGeneratedSchema.RawSQL);
-            applyTempSchemaCommand.Connection = connection;
+            applyTempSchemaCommand.Connection = stageConnection;
             await applyTempSchemaCommand.ExecuteNonQueryAsync();
 
+            stageConnection.Close();
+
             //Package staging schema for comparison
-            var stagingPackages = NewSchema.Keys.Select(k => $"/C {SqlPackageUtililtyPath} /a:Extract /scs:{connection.ConnectionString} /tf:{Path.Combine(TempFolderBasePath, stagingSchemaName + ".dacpac")} /p:TableData={stagingSchemaName}.*");
-            var processes = stagingPackages.Select(p => Process.Start("CMD.exe", p)).ToList();
+            var stagingProcess = Process.Start($"{SqlPackageUtililtyPath}", $"/a:Extract /scs:{stageConnection.ConnectionString} " +
+                $"/tf:{Path.Combine(TempFolderBasePath, AppName + "_Staging.dacpac")}");
 
             //Package prod schema for comparison
-            var prodPackages = OldSchema.Keys.Select(k => $"/C {SqlPackageUtililtyPath} /a:Extract /scs:{connection.ConnectionString} /tf:{Path.Combine(TempFolderBasePath, AppName + ".dacpac")} /p:TableData={AppName}.{k}");
-            processes.AddRange(stagingPackages.Select(p => Process.Start("CMD.exe", p)));
+            var prodProcess = Process.Start($"{SqlPackageUtililtyPath}", $"/a:Extract /scs:{prodConnection.ConnectionString} " +
+                $"/tf:{Path.Combine(TempFolderBasePath, AppName + ".dacpac")}");
 
-            foreach(var process in processes)
-            {
-                process.WaitForExit();
-            }
+            stagingProcess.WaitForExit();
+            prodProcess.WaitForExit();
 
             //Generate migration sql
             var migrationPath = Path.Combine(TempFolderBasePath, AppName + "M.sql");
+            string ExitIfDataLoss = ForceFlag ? "/p:BlockOnPossibleDataLoss=False" : "/p:BlockOnPossibleDataLoss=False";
 
-            string diffPackage = $"/C {SqlPackageUtililtyPath} /a:Script /sf:{Path.Combine(TempFolderBasePath, stagingSchemaName + ".dacpac")} /tf:{Path.Combine(TempFolderBasePath, AppName + ".dacpac")} /tdn:{DatabaseName} /op:{migrationPath}";
-            var diffProcess = Process.Start("CMD.exe", diffPackage);
+            var diffProcess = Process.Start($"{SqlPackageUtililtyPath}", $"/a:Script /sf:" +
+                $"{Path.Combine(TempFolderBasePath, AppName + "_Staging.dacpac")} /tf:{Path.Combine(TempFolderBasePath, AppName + ".dacpac")}" +
+                $" /tdn:{prodDatabaseName} /op:{migrationPath} {ExitIfDataLoss}");
+
             diffProcess.WaitForExit();
 
             //Apply migraiton sql
-            var migrationCommand = new SqlCommand(ReadSqlFile(migrationPath));
-            migrationCommand.Connection = connection;
-            await migrationCommand.ExecuteNonQueryAsync();
+            var filteredMigrationsPath = FilterSqlFileForSchema(migrationPath, AppName);
+            var migrationProcess = Process.Start($"{SqlCommandUtililtyPath}", $"-S {prodConnection.ConnectionString.Split(';', '=').ElementAt(1)} -i \"{filteredMigrationsPath}\"");
 
-            connection.Close();
+            //Check if data loss exception happens
+            var output = migrationProcess.StandardOutput.ReadToEnd();
+            if (output.Contains("Msg 50000"))
+                throw new FormatException("Data Loss possible. Run again with Force flag to ignore");
+
+            migrationProcess.WaitForExit();
         }
 
-        private string ReadSqlFile(string filePath)
+        private string FilterSqlFileForSchema(string filePath, string schemaFilterName)
         {
-            return File.ReadAllText(filePath);
-        }   
+            var sqlText = File.ReadAllText(filePath);
+            //var prefix = sqlText.Substring(0, sqlText.IndexOf("USE [$(DatabaseName)];") + "USE [$(DatabaseName)];".Length);
+
+            //var commands = sqlText.Split(new string[1] { "Go" }, StringSplitOptions.RemoveEmptyEntries);
+            //commands = commands.Where(c => c.Contains(schemaFilterName)).ToArray();
+            //var rejoined = string.Join("Go", commands);
+            var newPath = filePath.Replace(".sql", "_filtered.sql");
+
+            File.WriteAllText(newPath, sqlText);
+
+            return newPath;
+        }
+
+        private const string dbNameQualifier = "Database=";
+        private string ExtractDatabaseNameFromConnectionString(string connStr)
+        {
+            var locationOfDb = connStr.IndexOf(dbNameQualifier) + dbNameQualifier.Length;
+            var str = connStr.Substring(locationOfDb, connStr.IndexOf(';', locationOfDb) - locationOfDb);
+            return str;
+        }
     }
 }

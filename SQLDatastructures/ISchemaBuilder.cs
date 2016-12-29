@@ -8,7 +8,7 @@ namespace Azureoth.Modules.SQLdb.Datastructures
 {
     public interface ISchemaBuilder
     {
-        Task UpdateSchema(Dictionary<string, JsonTable> OldSchema, Dictionary<string, JsonTable> NewSchema, string AppName);
+        Task UpdateSchema(Dictionary<string, JsonTable> OldSchema, Dictionary<string, JsonTable> NewSchema, string AppName, bool ForceFlag = false);
 
         Task CreateSchema(Dictionary<string, JsonTable> NewSchema, string AppName);
     }

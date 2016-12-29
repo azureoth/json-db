@@ -7,6 +7,6 @@ namespace Azureoth.Modules.SQLdb.Datastructures.Schema
 {
     public interface ISchemaBuilderFactory
     {
-        ISchemaBuilder CreateSchemaBuilder(string DatabaseConnectionString, string DatabaseName);
+        ISchemaBuilder CreateSchemaBuilder(string PrimaryDbConnection, string SecondaryDbConnection, string TempFolderPath);
     }
 }
