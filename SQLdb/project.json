@@ -1,19 +1,13 @@
 {
-  "version": "1.0.0-*",
+  "version": "1.0.2",
   "buildOptions": {
     "copyToOutput": { "include": [ "../third_party/" ] }
-  },
-
-  "scripts": {
-    "postcompile": [
-      "dotnet pack --no-build --configuration %compile:Configuration%"
-    ]
   },
 
   "dependencies": {
     "NETStandard.Library": "1.6.0",
     "Newtonsoft.Json": "9.0.1",
-    "SQLDatastructures": "1.0.0-*",
+    "SQLDatastructures": "1.0.2",
     "System.Diagnostics.Process": "4.1.0"
   },
 

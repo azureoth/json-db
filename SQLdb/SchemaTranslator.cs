@@ -180,7 +180,7 @@ namespace Azureoth.Modules.SQLdb
             //Create Foreign Key Constraints
             foreach (var relation in OneToManyRelations)
             {
-                SqlSchema.RawSQL += $"ALTER TABLE {SchemaName}.{relation.Item1} Add Constraint {relation.Item1}_{relation.Item2}_{relation.Item4}_FK Foreign Key (";
+                SqlSchema.RawSQL += $"ALTER TABLE {SchemaName}.{relation.Item1} Add Constraint FK_{relation.Item2}_{relation.Item4} Foreign Key (";
                 foreach (var fkType in relation.Item3)
                 {
                     SqlSchema.RawSQL += $"{relation.Item2}_{fkType.Key}_{relation.Item4}, ";
@@ -233,7 +233,7 @@ namespace Azureoth.Modules.SQLdb
 
 
                 //Foreign key constraints for table 1
-                SqlSchema.RawSQL += $"ALTER TABLE {SchemaName}.{relation.Item1}_{relation.Item2}_{relation.Item5} Add Constraint {relation.Item1}_{relation.Item2}_{relation.Item5}_FK Foreign Key (";
+                SqlSchema.RawSQL += $"ALTER TABLE {SchemaName}.{relation.Item1}_{relation.Item2}_{relation.Item5} Add Constraint FK_{relation.Item1}_{relation.Item2}_{relation.Item5} Foreign Key (";
                 foreach (var fkType in relation.Item3)
                 {
                     SqlSchema.RawSQL += $"{relation.Item2}_{fkType.Key}, ";

@@ -1601,7 +1601,7 @@
           "lib/netstandard1.3/System.Xml.XDocument.dll": {}
         }
       },
-      "SQLDatastructures/1.0.0": {
+      "SQLDatastructures/1.0.1": {
         "type": "project",
         "framework": ".NETStandard,Version=v1.6",
         "dependencies": {
@@ -5384,7 +5384,7 @@
         "ref/xamarinwatchos10/_._"
       ]
     },
-    "SQLDatastructures/1.0.0": {
+    "SQLDatastructures/1.0.1": {
       "type": "project",
       "path": "../SQLDatastructures/project.json",
       "msbuildProject": "../SQLDatastructures/SQLDatastructures.xproj"
@@ -5394,7 +5394,7 @@
     "": [
       "NETStandard.Library >= 1.6.0",
       "Newtonsoft.Json >= 9.0.1",
-      "SQLDatastructures >= 1.0.0-*",
+      "SQLDatastructures >= 1.0.2",
       "System.Diagnostics.Process >= 4.1.0"
     ],
     ".NETStandard,Version=v1.6": []
